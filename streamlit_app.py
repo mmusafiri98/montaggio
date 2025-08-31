@@ -1,16 +1,17 @@
-# streamlit_app.py - Video Editor Simple
+# streamlit_app.py - Video Editor Pure Python
 import streamlit as st
-import subprocess
 import tempfile
 import os
 import uuid
 import json
 from datetime import datetime
 import shutil
+import base64
+from pathlib import Path
 
 # === CONFIG ===
 st.set_page_config(
-    page_title="🎬 Video Editor Lite",
+    page_title="🎬 Video Editor Pure Python",
     page_icon="🎬",
     layout="wide"
 )
@@ -29,54 +30,124 @@ st.markdown("""
     .stApp { 
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
     }
     .main-header { 
         text-align: center; 
-        font-size: 3rem; 
-        font-weight: 800; 
+        font-size: 3.5rem; 
+        font-weight: 900; 
         color: white; 
         margin-bottom: 1rem;
-        padding: 30px 0;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        padding: 40px 0;
+        text-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+        background: rgba(255,255,255,0.1);
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    .feature-card {
+        background: rgba(255,255,255,0.15);
+        padding: 25px;
+        border-radius: 15px;
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(255,255,255,0.2);
+        margin: 20px 0;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease;
+    }
+    .feature-card:hover {
+        transform: translateY(-5px);
     }
     .section-header {
+        background: rgba(255,255,255,0.2);
+        padding: 20px;
+        border-radius: 12px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.3);
+        margin: 25px 0;
+        color: white;
+        font-weight: 600;
+    }
+    .media-item {
         background: rgba(255,255,255,0.1);
         padding: 15px;
         border-radius: 10px;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.2);
+        margin: 10px 0;
+        border-left: 4px solid #4ECDC4;
+    }
+    .timeline-item {
+        background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 8px 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    .export-section {
+        background: rgba(255,255,255,0.95);
+        padding: 30px;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        margin: 25px 0;
+        border: 2px solid rgba(255,255,255,0.3);
+    }
+    .stButton > button {
+        background: linear-gradient(135deg, #FF6B6B, #4ECDC4) !important;
+        color: white !important;
+        border: none !important;
+        padding: 15px 35px !important;
+        border-radius: 30px !important;
+        font-weight: 700 !important;
+        font-size: 1.1rem !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+    }
+    .stButton > button:hover {
+        transform: translateY(-3px) !important;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.3) !important;
+    }
+    .success-message {
+        background: linear-gradient(45deg, #56ab2f, #a8e6cf);
+        padding: 20px;
+        border-radius: 15px;
+        color: white;
+        text-align: center;
+        font-weight: 600;
         margin: 20px 0;
     }
-    .video-timeline {
-        background: #2c3e50;
+    .warning-message {
+        background: linear-gradient(45deg, #f093fb, #f5576c);
+        padding: 20px;
+        border-radius: 15px;
+        color: white;
+        text-align: center;
+        font-weight: 600;
+        margin: 20px 0;
+    }
+    .info-card {
+        background: rgba(255,255,255,0.1);
         padding: 20px;
         border-radius: 10px;
         margin: 15px 0;
         color: white;
+        border-left: 5px solid #4ECDC4;
     }
-    .export-section {
-        background: rgba(255,255,255,0.9);
-        padding: 25px;
+    .metric-card {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        padding: 20px;
         border-radius: 15px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        margin: 20px 0;
-    }
-    .stButton > button {
-        background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+        text-align: center;
         color: white;
-        border: none;
-        padding: 12px 30px;
-        border-radius: 25px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+        margin: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }
 </style>
 """, unsafe_allow_html=True)
 
 # === UTILS ===
-def save_uploaded_file(uploaded_file, file_type="video"):
+def save_uploaded_file(uploaded_file, file_type="media"):
     """Sauvegarde un fichier uploadé"""
-    file_extension = uploaded_file.name.split(".")[-1]
+    file_extension = uploaded_file.name.split(".")[-1].lower()
     unique_filename = f"{file_type}_{uuid.uuid4().hex}.{file_extension}"
     file_path = os.path.join(TEMP_DIR, unique_filename)
     
@@ -85,84 +156,42 @@ def save_uploaded_file(uploaded_file, file_type="video"):
     
     return file_path
 
-def get_video_info_ffprobe(video_path):
-    """Obtient les informations vidéo avec ffprobe"""
-    try:
-        cmd = [
-            'ffprobe', '-v', 'quiet', '-print_format', 'json', 
-            '-show_format', '-show_streams', video_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
-            
-            # Chercher le stream vidéo
-            for stream in data.get('streams', []):
-                if stream.get('codec_type') == 'video':
-                    return {
-                        "duration": float(data.get('format', {}).get('duration', 0)),
-                        "width": stream.get('width', 0),
-                        "height": stream.get('height', 0),
-                        "fps": eval(stream.get('r_frame_rate', '0/1'))
-                    }
-        return {"error": "Impossible de lire la vidéo"}
-    except:
-        return {"error": "FFprobe non disponible"}
+def get_file_size_mb(file_path):
+    """Retourne la taille du fichier en MB"""
+    if os.path.exists(file_path):
+        return os.path.getsize(file_path) / (1024 * 1024)
+    return 0
 
-def merge_videos_ffmpeg(video_paths, output_path):
-    """Fusionne les vidéos avec FFmpeg"""
-    try:
-        # Créer un fichier de liste temporaire
-        list_file = os.path.join(TEMP_DIR, f"list_{uuid.uuid4().hex}.txt")
-        with open(list_file, 'w') as f:
-            for video_path in video_paths:
-                f.write(f"file '{os.path.abspath(video_path)}'\n")
-        
-        # Commande FFmpeg
-        cmd = [
-            'ffmpeg', '-f', 'concat', '-safe', '0', 
-            '-i', list_file, '-c', 'copy', output_path, '-y'
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        # Nettoyage
-        if os.path.exists(list_file):
-            os.remove(list_file)
-        
-        return result.returncode == 0, result.stderr
-    except Exception as e:
-        return False, str(e)
+def create_download_link(file_path, filename):
+    """Crée un lien de téléchargement pour un fichier"""
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            data = f.read()
+        b64 = base64.b64encode(data).decode()
+        href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">📥 Télécharger {filename}</a>'
+        return href
+    return ""
 
-def add_audio_to_video_ffmpeg(video_path, audio_path, output_path):
-    """Ajoute l'audio à la vidéo avec FFmpeg"""
-    try:
-        cmd = [
-            'ffmpeg', '-i', video_path, '-i', audio_path,
-            '-c:v', 'copy', '-c:a', 'aac', '-map', '0:v:0', '-map', '1:a:0',
-            '-shortest', output_path, '-y'
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0, result.stderr
-    except Exception as e:
-        return False, str(e)
+def save_project_data():
+    """Sauvegarde les données du projet"""
+    project_data = {
+        "name": st.session_state.get("project_name", "Mon_Projet"),
+        "video_clips": st.session_state.get("video_clips", []),
+        "audio_clips": st.session_state.get("audio_clips", []),
+        "timeline": st.session_state.get("timeline", []),
+        "created_at": datetime.now().isoformat()
+    }
+    
+    project_file = os.path.join(PROJECTS_DIR, f"{project_data['name']}.json")
+    with open(project_file, "w", encoding="utf-8") as f:
+        json.dump(project_data, f, ensure_ascii=False, indent=2)
+    
+    return project_file
 
-def trim_video_ffmpeg(input_path, start_time, end_time, output_path):
-    """Découpe une vidéo avec FFmpeg"""
-    try:
-        duration = end_time - start_time
-        cmd = [
-            'ffmpeg', '-i', input_path, '-ss', str(start_time), 
-            '-t', str(duration), '-c', 'copy', output_path, '-y'
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0, result.stderr
-    except Exception as e:
-        return False, str(e)
+# === SESSION STATE INITIALIZATION ===
+if "project_name" not in st.session_state:
+    st.session_state.project_name = f"Projet_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-# === SESSION STATE ===
 if "video_clips" not in st.session_state:
     st.session_state.video_clips = []
 
@@ -172,348 +201,462 @@ if "audio_clips" not in st.session_state:
 if "timeline" not in st.session_state:
     st.session_state.timeline = []
 
+if "current_step" not in st.session_state:
+    st.session_state.current_step = 1
+
 # === HEADER ===
-st.markdown('<h1 class="main-header">🎬 Video Editor Lite</h1>', unsafe_allow_html=True)
-st.markdown('<p style="text-align: center; color: white; font-size: 1.2rem;">Édition vidéo simple avec FFmpeg</p>', unsafe_allow_html=True)
+st.markdown('''
+<div class="main-header">
+    🎬 Video Editor Pure Python
+    <div style="font-size: 1.2rem; margin-top: 10px; font-weight: 400;">
+        Éditeur vidéo simple sans dépendances externes
+    </div>
+</div>
+''', unsafe_allow_html=True)
 
-# === VÉRIFICATION FFMPEG ===
-def check_ffmpeg():
-    try:
-        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, text=True)
-        return result.returncode == 0
-    except:
-        return False
-
-if not check_ffmpeg():
-    st.error("""
-    ❌ **FFmpeg non détecté !**
+# === SIDEBAR ===
+with st.sidebar:
+    st.markdown("## 🎯 Navigation")
     
-    Pour utiliser cet éditeur, vous devez installer FFmpeg :
+    # Stepper visuel
+    steps = [
+        ("📥", "Import", 1),
+        ("✂️", "Montage", 2), 
+        ("🎵", "Audio", 3),
+        ("🎨", "Organisation", 4),
+        ("📦", "Export", 5)
+    ]
     
-    **Windows :** Téléchargez depuis https://ffmpeg.org/download.html
-    **macOS :** `brew install ffmpeg`
-    **Linux :** `sudo apt install ffmpeg` ou `sudo yum install ffmpeg`
-    """)
-    st.stop()
-else:
-    st.success("✅ FFmpeg détecté et prêt !")
+    current_step = st.radio(
+        "Étapes du projet:",
+        options=range(1, 6),
+        format_func=lambda x: f"{steps[x-1][0]} {steps[x-1][1]}",
+        index=st.session_state.current_step - 1
+    )
+    st.session_state.current_step = current_step
+    
+    st.markdown("---")
+    
+    # Gestion de projet
+    st.markdown("## 📁 Projet")
+    
+    project_name = st.text_input(
+        "Nom du projet:", 
+        value=st.session_state.project_name,
+        key="project_name_input"
+    )
+    st.session_state.project_name = project_name
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("💾 Sauver", use_container_width=True):
+            project_file = save_project_data()
+            st.success(f"✅ Sauvé!")
+    
+    with col2:
+        if st.button("🆕 Nouveau", use_container_width=True):
+            # Reset tout
+            for key in ["video_clips", "audio_clips", "timeline"]:
+                st.session_state[key] = []
+            st.session_state.project_name = f"Projet_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            st.session_state.current_step = 1
+            st.success("🆕 Nouveau projet!")
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Statistiques du projet
+    st.markdown("## 📊 Statistiques")
+    
+    video_count = len(st.session_state.video_clips)
+    audio_count = len(st.session_state.audio_clips)
+    timeline_count = len(st.session_state.timeline)
+    
+    st.metric("🎬 Vidéos", video_count)
+    st.metric("🎵 Audio", audio_count)  
+    st.metric("⏱️ Timeline", timeline_count)
+    
+    # Espace disque utilisé
+    total_size = 0
+    for clip in st.session_state.video_clips + st.session_state.audio_clips:
+        if os.path.exists(clip.get("path", "")):
+            total_size += get_file_size_mb(clip["path"])
+    
+    st.metric("💾 Espace", f"{total_size:.1f} MB")
 
-# === TABS ===
-tab1, tab2, tab3, tab4 = st.tabs(["📥 Import", "✂️ Montage", "🎵 Audio", "🚀 Export"])
+# === CONTENU PRINCIPAL BASÉ SUR L'ÉTAPE ===
 
-# === TAB 1: IMPORT ===
-with tab1:
-    st.markdown('<div class="section-header"><h2>📥 Import de Médias</h2></div>', unsafe_allow_html=True)
+# === ÉTAPE 1: IMPORT ===
+if current_step == 1:
+    st.markdown('<div class="section-header"><h2>📥 Étape 1 : Import de Médias</h2></div>', unsafe_allow_html=True)
+    
+    # Guide rapide
+    st.markdown('''
+    <div class="info-card">
+        <h4>🎯 Objectif de cette étape</h4>
+        <p>Importez vos vidéos et fichiers audio. Tous les formats courants sont supportés !</p>
+        <ul>
+            <li><strong>Vidéos :</strong> MP4, AVI, MOV, MKV, WebM, M4V</li>
+            <li><strong>Audio :</strong> MP3, WAV, AAC, OGG, M4A</li>
+        </ul>
+    </div>
+    ''', unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("### 🎬 Vidéos")
+        st.markdown("### 🎬 Import Vidéos")
+        
         uploaded_videos = st.file_uploader(
-            "Choisir des vidéos:",
-            type=["mp4", "avi", "mov", "mkv", "webm"],
+            "Glissez-déposez vos vidéos ici",
+            type=["mp4", "avi", "mov", "mkv", "webm", "m4v"],
             accept_multiple_files=True,
-            key="video_uploader"
+            key="video_uploader",
+            help="Vous pouvez sélectionner plusieurs vidéos à la fois"
         )
         
         if uploaded_videos:
             for video in uploaded_videos:
-                if st.button(f"➕ Ajouter {video.name}", key=f"add_video_{video.name}"):
-                    with st.spinner(f"Traitement de {video.name}..."):
-                        video_path = save_uploaded_file(video, "video")
-                        video_info = get_video_info_ffprobe(video_path)
-                        
-                        clip_data = {
-                            "name": video.name,
-                            "path": video_path,
-                            "info": video_info,
-                            "start_time": 0,
-                            "end_time": video_info.get("duration", 0)
-                        }
-                        
-                        st.session_state.video_clips.append(clip_data)
-                        st.success(f"✅ {video.name} ajoutée!")
-                        st.rerun()
+                if video.name not in [clip["name"] for clip in st.session_state.video_clips]:
+                    if st.button(f"➕ Ajouter {video.name}", key=f"add_video_{video.name}"):
+                        with st.spinner(f"📂 Import de {video.name} en cours..."):
+                            try:
+                                video_path = save_uploaded_file(video, "video")
+                                file_size = get_file_size_mb(video_path)
+                                
+                                clip_data = {
+                                    "name": video.name,
+                                    "path": video_path,
+                                    "type": "video",
+                                    "size_mb": file_size,
+                                    "imported_at": datetime.now().isoformat()
+                                }
+                                
+                                st.session_state.video_clips.append(clip_data)
+                                st.success(f"✅ {video.name} importée avec succès!")
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"❌ Erreur lors de l'import de {video.name}: {str(e)}")
+                else:
+                    st.info(f"📝 {video.name} déjà importée")
     
     with col2:
-        st.markdown("### 🎵 Audio")
+        st.markdown("### 🎵 Import Audio")
+        
         uploaded_audios = st.file_uploader(
-            "Choisir des fichiers audio:",
-            type=["mp3", "wav", "aac", "ogg"],
+            "Glissez-déposez vos fichiers audio ici",
+            type=["mp3", "wav", "aac", "ogg", "m4a"],
             accept_multiple_files=True,
-            key="audio_uploader"
+            key="audio_uploader",
+            help="Musiques, voix-off, effets sonores..."
         )
         
         if uploaded_audios:
             for audio in uploaded_audios:
-                if st.button(f"➕ Ajouter {audio.name}", key=f"add_audio_{audio.name}"):
-                    audio_path = save_uploaded_file(audio, "audio")
-                    
-                    clip_data = {
-                        "name": audio.name,
-                        "path": audio_path
-                    }
-                    
-                    st.session_state.audio_clips.append(clip_data)
-                    st.success(f"✅ {audio.name} ajouté!")
-                    st.rerun()
+                if audio.name not in [clip["name"] for clip in st.session_state.audio_clips]:
+                    if st.button(f"➕ Ajouter {audio.name}", key=f"add_audio_{audio.name}"):
+                        with st.spinner(f"🎵 Import de {audio.name} en cours..."):
+                            try:
+                                audio_path = save_uploaded_file(audio, "audio")
+                                file_size = get_file_size_mb(audio_path)
+                                
+                                clip_data = {
+                                    "name": audio.name,
+                                    "path": audio_path,
+                                    "type": "audio", 
+                                    "size_mb": file_size,
+                                    "imported_at": datetime.now().isoformat()
+                                }
+                                
+                                st.session_state.audio_clips.append(clip_data)
+                                st.success(f"✅ {audio.name} importé avec succès!")
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"❌ Erreur lors de l'import de {audio.name}: {str(e)}")
+                else:
+                    st.info(f"📝 {audio.name} déjà importé")
     
-    # Affichage des médias
+    # Bibliothèque de médias
+    if st.session_state.video_clips or st.session_state.audio_clips:
+        st.markdown("### 📚 Bibliothèque de Médias")
+        
+        tab_videos, tab_audios = st.tabs(["🎬 Vidéos", "🎵 Audio"])
+        
+        with tab_videos:
+            if st.session_state.video_clips:
+                for i, clip in enumerate(st.session_state.video_clips):
+                    with st.container():
+                        st.markdown(f'<div class="media-item">', unsafe_allow_html=True)
+                        
+                        col1, col2, col3 = st.columns([3, 2, 1])
+                        
+                        with col1:
+                            st.markdown(f"**🎬 {clip['name']}**")
+                            if os.path.exists(clip["path"]):
+                                st.video(clip["path"])
+                            else:
+                                st.error("⚠️ Fichier non trouvé")
+                        
+                        with col2:
+                            st.write(f"**Taille:** {clip['size_mb']:.1f} MB")
+                            st.write(f"**Type:** {clip['type'].upper()}")
+                            imported_date = datetime.fromisoformat(clip['imported_at'])
+                            st.write(f"**Importé:** {imported_date.strftime('%d/%m/%Y %H:%M')}")
+                        
+                        with col3:
+                            if st.button("🗑️", key=f"del_video_{i}", help="Supprimer cette vidéo"):
+                                if os.path.exists(clip["path"]):
+                                    try:
+                                        os.remove(clip["path"])
+                                    except:
+                                        pass
+                                st.session_state.video_clips.pop(i)
+                                st.success("🗑️ Vidéo supprimée!")
+                                st.rerun()
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("📝 Aucune vidéo importée pour le moment")
+        
+        with tab_audios:
+            if st.session_state.audio_clips:
+                for i, clip in enumerate(st.session_state.audio_clips):
+                    with st.container():
+                        st.markdown(f'<div class="media-item">', unsafe_allow_html=True)
+                        
+                        col1, col2, col3 = st.columns([3, 2, 1])
+                        
+                        with col1:
+                            st.markdown(f"**🎵 {clip['name']}**")
+                            if os.path.exists(clip["path"]):
+                                st.audio(clip["path"])
+                            else:
+                                st.error("⚠️ Fichier non trouvé")
+                        
+                        with col2:
+                            st.write(f"**Taille:** {clip['size_mb']:.1f} MB")
+                            st.write(f"**Type:** {clip['type'].upper()}")
+                            imported_date = datetime.fromisoformat(clip['imported_at'])
+                            st.write(f"**Importé:** {imported_date.strftime('%d/%m/%Y %H:%M')}")
+                        
+                        with col3:
+                            if st.button("🗑️", key=f"del_audio_{i}", help="Supprimer cet audio"):
+                                if os.path.exists(clip["path"]):
+                                    try:
+                                        os.remove(clip["path"])
+                                    except:
+                                        pass
+                                st.session_state.audio_clips.pop(i)
+                                st.success("🗑️ Audio supprimé!")
+                                st.rerun()
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("📝 Aucun fichier audio importé pour le moment")
+    
+    # Navigation
     if st.session_state.video_clips:
-        st.markdown("### 🎬 Vidéos Importées")
-        for i, clip in enumerate(st.session_state.video_clips):
-            with st.expander(f"🎬 {clip['name']}", expanded=False):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    if os.path.exists(clip["path"]):
-                        st.video(clip["path"])
-                with col2:
-                    info = clip.get("info", {})
-                    st.write(f"**Durée:** {info.get('duration', 0):.2f}s")
-                    st.write(f"**Résolution:** {info.get('width', 'N/A')}x{info.get('height', 'N/A')}")
-                    if st.button("🗑️ Supprimer", key=f"del_video_{i}"):
-                        st.session_state.video_clips.pop(i)
-                        st.rerun()
-    
-    if st.session_state.audio_clips:
-        st.markdown("### 🎵 Audio Importé")
-        for i, clip in enumerate(st.session_state.audio_clips):
-            with st.expander(f"🎵 {clip['name']}", expanded=False):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    if os.path.exists(clip["path"]):
-                        st.audio(clip["path"])
-                with col2:
-                    if st.button("🗑️ Supprimer", key=f"del_audio_{i}"):
-                        st.session_state.audio_clips.pop(i)
-                        st.rerun()
+        st.markdown("### ➡️ Étape suivante")
+        if st.button("🎬 Aller au Montage", type="primary", use_container_width=True):
+            st.session_state.current_step = 2
+            st.rerun()
 
-# === TAB 2: MONTAGE ===
-with tab2:
-    st.markdown('<div class="section-header"><h2>✂️ Montage Vidéo</h2></div>', unsafe_allow_html=True)
+# === ÉTAPE 2: MONTAGE ===
+elif current_step == 2:
+    st.markdown('<div class="section-header"><h2>✂️ Étape 2 : Montage et Timeline</h2></div>', unsafe_allow_html=True)
     
     if not st.session_state.video_clips:
-        st.warning("Aucune vidéo importée. Allez dans l'onglet Import.")
-    else:
-        st.markdown("### ⏱️ Découpage des Clips")
+        st.markdown('''
+        <div class="warning-message">
+            ⚠️ <strong>Aucune vidéo importée !</strong><br>
+            Retournez à l'étape 1 pour importer vos vidéos.
+        </div>
+        ''', unsafe_allow_html=True)
         
-        for i, clip in enumerate(st.session_state.video_clips):
-            with st.expander(f"✂️ {clip['name']}", expanded=True):
-                col1, col2, col3 = st.columns([2, 1, 1])
-                
-                max_duration = clip["info"].get("duration", 0)
-                
-                with col1:
-                    st.write(f"Durée originale: {max_duration:.2f}s")
-                
-                with col2:
-                    start = st.number_input(
-                        "Début (s)", 
-                        min_value=0.0,
-                        max_value=max_duration,
-                        value=clip.get("start_time", 0.0),
-                        step=0.1,
-                        key=f"start_{i}"
-                    )
-                    clip["start_time"] = start
-                
-                with col3:
-                    end = st.number_input(
-                        "Fin (s)", 
-                        min_value=start,
-                        max_value=max_duration,
-                        value=clip.get("end_time", max_duration),
-                        step=0.1,
-                        key=f"end_{i}"
-                    )
-                    clip["end_time"] = end
-                
-                # Ajout à la timeline
-                if st.button(f"➕ Ajouter à la Timeline", key=f"timeline_{i}"):
-                    timeline_clip = clip.copy()
-                    timeline_clip["timeline_pos"] = len(st.session_state.timeline)
-                    st.session_state.timeline.append(timeline_clip)
-                    st.success("Ajouté à la timeline!")
-                    st.rerun()
-        
-        # Timeline actuelle
-        if st.session_state.timeline:
-            st.markdown("### 🎬 Timeline Actuelle")
-            
-            total_duration = 0
-            for i, t_clip in enumerate(st.session_state.timeline):
-                duration = t_clip["end_time"] - t_clip["start_time"]
-                total_duration += duration
-                
-                col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
-                
-                with col1:
-                    st.write(f"🎬 {t_clip['name']}")
-                with col2:
-                    st.write(f"⏱️ {duration:.2f}s")
-                with col3:
-                    st.write(f"📍 #{i+1}")
-                with col4:
-                    if st.button("🗑️", key=f"remove_timeline_{i}"):
-                        st.session_state.timeline.pop(i)
-                        st.rerun()
-            
-            st.info(f"**Durée totale:** {total_duration:.2f}s")
-            
-            if st.button("🗑️ Vider Timeline"):
-                st.session_state.timeline = []
-                st.rerun()
-
-# === TAB 3: AUDIO ===
-with tab3:
-    st.markdown('<div class="section-header"><h2>🎵 Gestion Audio</h2></div>', unsafe_allow_html=True)
+        if st.button("📥 Retour à l'Import", type="primary"):
+            st.session_state.current_step = 1
+            st.rerun()
     
-    if st.session_state.audio_clips:
-        selected_audio = st.selectbox(
-            "Choisir une piste audio:",
-            options=["Aucune"] + [clip["name"] for clip in st.session_state.audio_clips]
-        )
-        
-        if selected_audio != "Aucune":
-            st.success(f"🎵 Audio sélectionné: {selected_audio}")
-        
-        # Prévisualisation audio
-        for clip in st.session_state.audio_clips:
-            if clip["name"] == selected_audio:
-                st.audio(clip["path"])
-                break
     else:
-        st.warning("Aucun fichier audio importé.")
-        selected_audio = "Aucune"
-
-# === TAB 4: EXPORT ===
-with tab4:
-    st.markdown('<div class="section-header"><h2>🚀 Export Final</h2></div>', unsafe_allow_html=True)
-    
-    if not st.session_state.timeline:
-        st.warning("Aucune timeline créée. Allez dans l'onglet Montage.")
-    else:
-        st.markdown('<div class="export-section">', unsafe_allow_html=True)
+        st.markdown('''
+        <div class="info-card">
+            <h4>🎯 Objectif de cette étape</h4>
+            <p>Organisez vos vidéos dans l'ordre souhaité pour créer votre montage final.</p>
+            <ul>
+                <li>Glissez les vidéos dans la timeline</li>
+                <li>Changez l'ordre en réorganisant</li>
+                <li>Prévisualisez le résultat</li>
+            </ul>
+        </div>
+        ''', unsafe_allow_html=True)
         
-        # Configuration d'export
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([1, 1])
         
         with col1:
-            output_name = st.text_input("Nom du fichier:", value="video_final")
-            export_format = st.selectbox("Format:", ["mp4", "avi", "mov"])
+            st.markdown("### 📚 Vidéos Disponibles")
+            
+            for i, clip in enumerate(st.session_state.video_clips):
+                with st.container():
+                    st.markdown(f'<div class="media-item">', unsafe_allow_html=True)
+                    
+                    col_info, col_action = st.columns([3, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**🎬 {clip['name']}**")
+                        st.write(f"Taille: {clip['size_mb']:.1f} MB")
+                    
+                    with col_action:
+                        if st.button("➕", key=f"add_to_timeline_{i}", help=f"Ajouter {clip['name']} à la timeline"):
+                            timeline_clip = clip.copy()
+                            timeline_clip["timeline_position"] = len(st.session_state.timeline)
+                            timeline_clip["added_at"] = datetime.now().isoformat()
+                            
+                            st.session_state.timeline.append(timeline_clip)
+                            st.success(f"✅ {clip['name']} ajoutée à la timeline!")
+                            st.rerun()
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
         
         with col2:
-            quality = st.selectbox("Qualité:", ["Originale", "Haute", "Moyenne", "Basse"])
+            st.markdown("### 🎬 Timeline de Montage")
             
-            # Paramètres selon la qualité
-            quality_params = {
-                "Originale": ["-c", "copy"],
-                "Haute": ["-crf", "18", "-preset", "slow"],
-                "Moyenne": ["-crf", "23", "-preset", "medium"],
-                "Basse": ["-crf", "28", "-preset", "fast"]
-            }
+            if st.session_state.timeline:
+                total_size = sum(clip["size_mb"] for clip in st.session_state.timeline)
+                st.info(f"📊 Timeline: {len(st.session_state.timeline)} clip(s) - {total_size:.1f} MB total")
+                
+                # Réorganisation
+                st.markdown("**Ordre des vidéos dans la timeline:**")
+                
+                for i, t_clip in enumerate(st.session_state.timeline):
+                    st.markdown(f'<div class="timeline-item">', unsafe_allow_html=True)
+                    
+                    col_pos, col_name, col_actions = st.columns([1, 4, 2])
+                    
+                    with col_pos:
+                        st.markdown(f"**#{i+1}**")
+                    
+                    with col_name:
+                        st.markdown(f"🎬 **{t_clip['name']}**")
+                        st.write(f"{t_clip['size_mb']:.1f} MB")
+                    
+                    with col_actions:
+                        col_up, col_down, col_del = st.columns(3)
+                        
+                        with col_up:
+                            if i > 0 and st.button("⬆️", key=f"up_{i}", help="Monter"):
+                                st.session_state.timeline[i], st.session_state.timeline[i-1] = st.session_state.timeline[i-1], st.session_state.timeline[i]
+                                st.rerun()
+                        
+                        with col_down:
+                            if i < len(st.session_state.timeline)-1 and st.button("⬇️", key=f"down_{i}", help="Descendre"):
+                                st.session_state.timeline[i], st.session_state.timeline[i+1] = st.session_state.timeline[i+1], st.session_state.timeline[i]
+                                st.rerun()
+                        
+                        with col_del:
+                            if st.button("🗑️", key=f"remove_{i}", help="Retirer"):
+                                st.session_state.timeline.pop(i)
+                                st.success("🗑️ Retiré de la timeline!")
+                                st.rerun()
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Actions sur la timeline
+                st.markdown("### 🎬 Actions Timeline")
+                
+                col_clear, col_preview = st.columns(2)
+                
+                with col_clear:
+                    if st.button("🗑️ Vider la Timeline", use_container_width=True):
+                        st.session_state.timeline = []
+                        st.success("🗑️ Timeline vidée!")
+                        st.rerun()
+                
+                with col_preview:
+                    st.markdown("**Prévisualisation:**")
+                    st.info("🎥 Les vidéos seront assemblées dans l'ordre de la timeline lors de l'export")
+                
+            else:
+                st.markdown('''
+                <div class="info-card">
+                    <p>📝 <strong>Timeline vide</strong></p>
+                    <p>Ajoutez des vidéos depuis la colonne de gauche pour commencer votre montage.</p>
+                </div>
+                ''', unsafe_allow_html=True)
         
-        # Bouton d'export
-        if st.button("🚀 EXPORTER LA VIDÉO", type="primary", use_container_width=True):
-            with st.spinner("🎬 Export en cours..."):
-                try:
-                    # Étape 1: Découper les clips individuels
-                    trimmed_clips = []
-                    
-                    for i, t_clip in enumerate(st.session_state.timeline):
-                        trimmed_path = os.path.join(TEMP_DIR, f"trimmed_{i}_{uuid.uuid4().hex}.{export_format}")
-                        
-                        success, error = trim_video_ffmpeg(
-                            t_clip["path"],
-                            t_clip["start_time"],
-                            t_clip["end_time"],
-                            trimmed_path
-                        )
-                        
-                        if success:
-                            trimmed_clips.append(trimmed_path)
-                        else:
-                            st.error(f"Erreur découpage {t_clip['name']}: {error}")
-                            break
-                    
-                    if len(trimmed_clips) == len(st.session_state.timeline):
-                        # Étape 2: Fusionner les clips
-                        merged_path = os.path.join(TEMP_DIR, f"merged_{uuid.uuid4().hex}.{export_format}")
-                        
-                        if len(trimmed_clips) == 1:
-                            # Un seul clip
-                            shutil.copy2(trimmed_clips[0], merged_path)
-                        else:
-                            # Fusion multiple
-                            success, error = merge_videos_ffmpeg(trimmed_clips, merged_path)
-                            if not success:
-                                st.error(f"Erreur fusion: {error}")
-                                raise Exception("Échec de la fusion")
-                        
-                        # Étape 3: Ajouter l'audio si sélectionné
-                        final_path = os.path.join(EXPORTS_DIR, f"{output_name}.{export_format}")
-                        
-                        if selected_audio != "Aucune":
-                            audio_clip = next(
-                                (clip for clip in st.session_state.audio_clips if clip["name"] == selected_audio), 
-                                None
-                            )
-                            
-                            if audio_clip:
-                                success, error = add_audio_to_video_ffmpeg(
-                                    merged_path, audio_clip["path"], final_path
-                                )
-                                if not success:
-                                    st.error(f"Erreur audio: {error}")
-                                    # Copier sans audio en cas d'échec
-                                    shutil.copy2(merged_path, final_path)
-                            else:
-                                shutil.copy2(merged_path, final_path)
-                        else:
-                            shutil.copy2(merged_path, final_path)
-                        
-                        # Nettoyage des fichiers temporaires
-                        for temp_file in trimmed_clips + [merged_path]:
-                            if os.path.exists(temp_file):
-                                try:
-                                    os.remove(temp_file)
-                                except:
-                                    pass
-                        
-                        if os.path.exists(final_path):
-                            st.success(f"🎉 Export terminé! {output_name}.{export_format}")
-                            
-                            # Affichage du résultat
-                            st.video(final_path)
-                            
-                            # Téléchargement
-                            with open(final_path, "rb") as f:
-                                st.download_button(
-                                    f"📥 Télécharger {output_name}.{export_format}",
-                                    data=f.read(),
-                                    file_name=f"{output_name}.{export_format}",
-                                    mime=f"video/{export_format}",
-                                    use_container_width=True
-                                )
-                            
-                            # Statistiques
-                            file_size = os.path.getsize(final_path) / (1024 * 1024)
-                            st.info(f"📊 Taille: {file_size:.1f} MB")
-                        
-                        else:
-                            st.error("❌ Échec de l'export")
-                    
-                except Exception as e:
-                    st.error(f"❌ Erreur: {str(e)}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Navigation
+        if st.session_state.timeline:
+            st.markdown("### ➡️ Étape suivante") 
+            col_back, col_next = st.columns(2)
+            
+            with col_back:
+                if st.button("⬅️ Retour Import", use_container_width=True):
+                    st.session_state.current_step = 1
+                    st.rerun()
+            
+            with col_next:
+                if st.button("🎵 Ajouter l'Audio", type="primary", use_container_width=True):
+                    st.session_state.current_step = 3
+                    st.rerun()
 
-# === FOOTER ===
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: white; padding: 20px;">
-    <h4>🎬 Video Editor Lite</h4>
-    <p>Éditeur vidéo simple utilisant FFmpeg</p>
-    <p><strong>Fonctions:</strong> Import • Découpage • Timeline • Audio • Export</p>
-</div>
-""", unsafe_allow_html=True)
+# === ÉTAPE 3: AUDIO ===
+elif current_step == 3:
+    st.markdown('<div class="section-header"><h2>🎵 Étape 3 : Gestion Audio</h2></div>', unsafe_allow_html=True)
+    
+    st.markdown('''
+    <div class="info-card">
+        <h4>🎯 Objectif de cette étape</h4>
+        <p>Sélectionnez les fichiers audio à ajouter à votre vidéo finale.</p>
+        <ul>
+            <li>Musique de fond</li>
+            <li>Voix-off ou narration</li>
+            <li>Effets sonores</li>
+        </ul>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    if not st.session_state.audio_clips:
+        st.markdown('''
+        <div class="warning-message">
+            ℹ️ <strong>Aucun fichier audio importé</strong><br>
+            Vous pouvez continuer sans audio ou retourner à l'import pour ajouter des fichiers audio.
+        </div>
+        ''', unsafe_allow_html=True)
+        
+        col_import, col_skip = st.columns(2)
+        
+        with col_import:
+            if st.button("📥 Retour à l'Import Audio", use_container_width=True):
+                st.session_state.current_step = 1
+                st.rerun()
+        
+        with col_skip:
+            if st.button("⏭️ Continuer sans Audio", type="primary", use_container_width=True):
+                st.session_state.current_step = 4
+                st.rerun()
+    
+    else:
+        st.markdown("### 🎵 Fichiers Audio Disponibles")
+        
+        # Sélection multiple des fichiers audio
+        selected_audio = st.multiselect(
+            "Choisissez les fichiers audio à inclure dans votre vidéo:",
+            options=[clip["name"] for clip in st.session_state.audio_clips],
+            default=st.session_state.get("selected_audio_files", []),
+            help="Vous pouvez sélectionner plusieurs fichiers audio"
+        )
+        
+        st.session_state.selected_audio_files = selected_audio
+        
+        # Prévisualisation des fichiers sélectionnés
+        if selected_audio:
+            st.markdown("### 🎧 Prévisualisation des Fichiers Sélectionnés")
+            
+            for audio_name in selected_audio:
+                audio_clip = next((clip for clip in st.session_state.audio_clips if clip["name"] == audio_name), None)
+                if audio_clip and os.path.exists(audio_clip["path"]):
+                    with st.container():
+                        st.markdown(f'<div class="media-item">', unsafe_allow_html=True)
+                        
+                        col1, col2 =

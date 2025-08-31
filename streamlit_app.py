@@ -51,16 +51,41 @@ if st.session_state.step == 1:
 # === ÉTAPE 2: MONTAGE ===
 elif st.session_state.step == 2:
     st.header("✂️ Montage")
+    st.subheader("📚 Vidéos disponibles")
     for i, clip in enumerate(st.session_state.videos):
+        st.write(f"🎬 {clip['name']}")
+        st.video(clip["path"])
         if st.button(f"Ajouter {clip['name']} à la timeline", key=f"add{i}"):
             st.session_state.timeline.append(clip)
-    st.write("Timeline:", [c['name'] for c in st.session_state.timeline])
+
+    st.subheader("🎬 Timeline")
+    if st.session_state.timeline:
+        for i, tclip in enumerate(st.session_state.timeline):
+            col1, col2, col3 = st.columns([3,1,1])
+            with col1:
+                st.write(f"#{i+1} - {tclip['name']}")
+                st.video(tclip["path"])
+            with col2:
+                if i > 0 and st.button("⬆️", key=f"up{i}"):
+                    st.session_state.timeline[i], st.session_state.timeline[i-1] = st.session_state.timeline[i-1], st.session_state.timeline[i]
+                    st.experimental_rerun()
+                if i < len(st.session_state.timeline)-1 and st.button("⬇️", key=f"down{i}"):
+                    st.session_state.timeline[i], st.session_state.timeline[i+1] = st.session_state.timeline[i+1], st.session_state.timeline[i]
+                    st.experimental_rerun()
+            with col3:
+                if st.button("🗑️", key=f"del{i}"):
+                    st.session_state.timeline.pop(i)
+                    st.experimental_rerun()
+    else:
+        st.info("Timeline vide. Ajoutez des vidéos pour commencer.")
 
 # === ÉTAPE 3: AUDIO ===
 elif st.session_state.step == 3:
     st.header("🎵 Audio")
     choices = st.multiselect("Choisir audio:", [a["name"] for a in st.session_state.audios])
-    st.write("Sélection:", choices)
+    for a in st.session_state.audios:
+        if a["name"] in choices:
+            st.audio(a["path"])
 
 # === ÉTAPE 4: EXPORT ===
 elif st.session_state.step == 4:

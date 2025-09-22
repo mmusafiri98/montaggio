@@ -68,13 +68,14 @@ if "chat_history" not in st.session_state:
 if "mode" not in st.session_state:
     st.session_state.mode = "describe"
 
+# Charger BLIP
 if "processor" not in st.session_state or "model" not in st.session_state:
     with st.spinner("Chargement du modèle BLIP..."):
         processor, model = load_blip()
         st.session_state.processor = processor
         st.session_state.model = model
 
-# === CLIENTS QWEN ===
+# === CLIENTS QWEN ET IMAGE EDIT ===
 if "qwen_client" not in st.session_state:
     try:
         st.session_state.qwen_client = Client("Qwen/Qwen2-72B-Instruct")
@@ -82,37 +83,27 @@ if "qwen_client" not in st.session_state:
         st.error(f"Erreur init Qwen Chat: {e}")
         st.session_state.qwen_client = None
 
-if "qwen_edit_client" not in st.session_state:
+# Nouveau modèle pour l’édition d’image
+if "image_edit_client" not in st.session_state:
     try:
-        st.session_state.qwen_edit_client = Client("Qwen/Qwen-Image-Edit")
+        st.session_state.image_edit_client = Client("Selfit/ImageEditPro")
     except Exception as e:
-        st.error(f"Erreur init Qwen Edit: {e}")
-        st.session_state.qwen_edit_client = None
+        st.error(f"Erreur init ImageEditPro: {e}")
+        st.session_state.image_edit_client = None
 
-# === FONCTION ÉDITION IMAGE (simplifiée) ===
-def edit_image_with_qwen(image_path, edit_instruction, client):
+# === FONCTION ÉDITION IMAGE ===
+def edit_image_with_new_model(image_path, client):
     try:
         result = client.predict(
-            image=handle_file(image_path),
-            prompt=edit_instruction,
-            seed=0,
-            randomize_seed=True,
-            true_guidance_scale=4,
-            num_inference_steps=50,
-            rewrite_prompt=True,
-            api_name="/infer"
+            output_img=handle_file(image_path),
+            api_name="/simple_use_as_input"
         )
-
-        if isinstance(result, list) and len(result) > 0:
-            result = result[0]
-
         if isinstance(result, str) and os.path.exists(result):
             edited_image_path = os.path.join(EDITED_IMAGES_DIR, f"edited_{uuid.uuid4().hex}.png")
             Image.open(result).save(edited_image_path)
-            return edited_image_path, f"✅ Image éditée avec succès selon: '{edit_instruction}'"
+            return edited_image_path, "✅ Image éditée avec succès"
         else:
             return None, f"❌ Résultat inattendu: {result}"
-
     except Exception as e:
         return None, f"Erreur édition: {e}"
 
@@ -157,7 +148,7 @@ with st.form("chat_form", clear_on_submit=True):
         user_message = st.text_input("💬 Question sur l'image (optionnel)")
         submit = st.form_submit_button("🚀 Analyser")
     else:
-        user_message = st.text_input("✏️ Instruction d'édition", placeholder="ex: rendre le ciel bleu")
+        user_message = st.text_input("✏️ Instruction d'édition (optionnel)")
         submit = st.form_submit_button("✏️ Éditer")
 
 if submit:
@@ -176,20 +167,16 @@ if submit:
             )
             st.session_state.chat_history.append({"role": "user", "content": user_message or "Image envoyée", "image": image_path})
             st.session_state.chat_history.append({"role": "assistant", "content": response})
-
         else:
-            if not user_message:
-                st.error("⚠️ Spécifiez une instruction d'édition")
-                st.stop()
-            edited_path, msg = edit_image_with_qwen(image_path, user_message, st.session_state.qwen_edit_client)
+            edited_path, msg = edit_image_with_new_model(image_path, st.session_state.image_edit_client)
             if edited_path:
                 edited_caption = generate_caption(Image.open(edited_path), st.session_state.processor, st.session_state.model)
                 response = st.session_state.qwen_client.predict(
-                    query=f"Image éditée: {user_message}. Résultat: {edited_caption}",
+                    query=f"Image éditée. Résultat: {edited_caption}",
                     system=SYSTEM_PROMPT,
                     api_name="/model_chat"
                 )
-                st.session_state.chat_history.append({"role": "user", "content": user_message, "image": image_path})
+                st.session_state.chat_history.append({"role": "user", "content": user_message or "Édition image", "image": image_path})
                 st.session_state.chat_history.append({"role": "assistant", "content": response, "edited_image": edited_path})
             else:
                 st.error(msg)
@@ -212,3 +199,4 @@ if st.session_state.chat_history:
         st.session_state.chat_history = []
         save_chat_history([], st.session_state.chat_id)
         st.rerun()
+

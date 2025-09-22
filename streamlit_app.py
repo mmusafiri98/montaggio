@@ -68,14 +68,13 @@ if "chat_history" not in st.session_state:
 if "mode" not in st.session_state:
     st.session_state.mode = "describe"
 
-# Charger BLIP
 if "processor" not in st.session_state or "model" not in st.session_state:
     with st.spinner("Chargement du modèle BLIP..."):
         processor, model = load_blip()
         st.session_state.processor = processor
         st.session_state.model = model
 
-# === CLIENTS QWEN ET IMAGE EDIT ===
+# === CLIENTS QWEN ===
 if "qwen_client" not in st.session_state:
     try:
         st.session_state.qwen_client = Client("Qwen/Qwen2-72B-Instruct")
@@ -83,27 +82,30 @@ if "qwen_client" not in st.session_state:
         st.error(f"Erreur init Qwen Chat: {e}")
         st.session_state.qwen_client = None
 
-# Nouveau modèle pour l’édition d’image
-if "image_edit_client" not in st.session_state:
+if "qwen_edit_client" not in st.session_state:
     try:
-        st.session_state.image_edit_client = Client("Selfit/ImageEditPro")
+        st.session_state.qwen_edit_client = Client("Selfit/ImageEditPro")
     except Exception as e:
-        st.error(f"Erreur init ImageEditPro: {e}")
-        st.session_state.image_edit_client = None
+        st.error(f"Erreur init Qwen Edit: {e}")
+        st.session_state.qwen_edit_client = None
 
 # === FONCTION ÉDITION IMAGE ===
-def edit_image_with_new_model(image_path, client):
+def edit_image_with_qwen(image_path, edit_instruction, client):
+    if client is None:
+        return None, "❌ Client d'édition non initialisé"
     try:
         result = client.predict(
             output_img=handle_file(image_path),
+            prompt=edit_instruction,
             api_name="/simple_use_as_input"
         )
+
         if isinstance(result, str) and os.path.exists(result):
             edited_image_path = os.path.join(EDITED_IMAGES_DIR, f"edited_{uuid.uuid4().hex}.png")
             Image.open(result).save(edited_image_path)
-            return edited_image_path, "✅ Image éditée avec succès"
+            return edited_image_path, f"✅ Image éditée avec succès selon: '{edit_instruction}'"
         else:
-            return None, f"❌ Résultat inattendu: {result}"
+            return None, f"❌ Résultat inattendu: {str(result)[:100]}..."
     except Exception as e:
         return None, f"Erreur édition: {e}"
 
@@ -117,8 +119,10 @@ if st.sidebar.button("➕ Nouveau chat"):
 
 available_chats = list_chats()
 if available_chats:
-    selected = st.sidebar.selectbox("Vos discussions:", available_chats,
-                                    index=available_chats.index(st.session_state.chat_id) if st.session_state.chat_id in available_chats else 0)
+    selected = st.sidebar.selectbox(
+        "Vos discussions:", available_chats,
+        index=available_chats.index(st.session_state.chat_id) if st.session_state.chat_id in available_chats else 0
+    )
     if selected != st.session_state.chat_id:
         st.session_state.chat_id = selected
         st.session_state.chat_history = load_chat_history(selected)
@@ -148,7 +152,7 @@ with st.form("chat_form", clear_on_submit=True):
         user_message = st.text_input("💬 Question sur l'image (optionnel)")
         submit = st.form_submit_button("🚀 Analyser")
     else:
-        user_message = st.text_input("✏️ Instruction d'édition (optionnel)")
+        user_message = st.text_input("✏️ Instruction d'édition", placeholder="ex: rendre le ciel bleu")
         submit = st.form_submit_button("✏️ Éditer")
 
 if submit:
@@ -158,6 +162,10 @@ if submit:
         image.save(image_path)
 
         if st.session_state.mode == "describe":
+            if st.session_state.qwen_client is None:
+                st.error("❌ Le modèle Qwen Chat n'est pas disponible.")
+                st.stop()
+
             caption = generate_caption(image, st.session_state.processor, st.session_state.model)
             query = f"Description image: {caption}. {user_message}" if user_message else f"Description image: {caption}"
             response = st.session_state.qwen_client.predict(
@@ -167,21 +175,31 @@ if submit:
             )
             st.session_state.chat_history.append({"role": "user", "content": user_message or "Image envoyée", "image": image_path})
             st.session_state.chat_history.append({"role": "assistant", "content": response})
+
         else:
-            edited_path, msg = edit_image_with_new_model(image_path, st.session_state.image_edit_client)
+            if not user_message:
+                st.error("⚠️ Spécifiez une instruction d'édition")
+                st.stop()
+            edited_path, msg = edit_image_with_qwen(image_path, user_message, st.session_state.qwen_edit_client)
             if edited_path:
-                edited_caption = generate_caption(Image.open(edited_path), st.session_state.processor, st.session_state.model)
-                response = st.session_state.qwen_client.predict(
-                    query=f"Image éditée. Résultat: {edited_caption}",
-                    system=SYSTEM_PROMPT,
-                    api_name="/model_chat"
-                )
-                st.session_state.chat_history.append({"role": "user", "content": user_message or "Édition image", "image": image_path})
+                if st.session_state.qwen_client is not None:
+                    edited_caption = generate_caption(Image.open(edited_path), st.session_state.processor, st.session_state.model)
+                    response = st.session_state.qwen_client.predict(
+                        query=f"Image éditée: {user_message}. Résultat: {edited_caption}",
+                        system=SYSTEM_PROMPT,
+                        api_name="/model_chat"
+                    )
+                else:
+                    response = f"Image éditée: {user_message}"
+                st.session_state.chat_history.append({"role": "user", "content": user_message, "image": image_path})
                 st.session_state.chat_history.append({"role": "assistant", "content": response, "edited_image": edited_path})
             else:
                 st.error(msg)
 
     elif user_message:
+        if st.session_state.qwen_client is None:
+            st.error("❌ Le modèle Qwen Chat n'est pas disponible.")
+            st.stop()
         response = st.session_state.qwen_client.predict(
             query=user_message,
             system=SYSTEM_PROMPT,
@@ -199,4 +217,3 @@ if st.session_state.chat_history:
         st.session_state.chat_history = []
         save_chat_history([], st.session_state.chat_id)
         st.rerun()
-

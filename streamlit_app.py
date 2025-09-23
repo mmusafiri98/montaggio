@@ -10,9 +10,9 @@ import uuid
 
 # === CONFIG  pour accede a la page du titre appelle vision AI chat avec l icon assigne et l layaout assigne===
 st.set_page_config(page_title="Vision AI Chat", page_icon="🎯", layout="wide")
-#avec una assignations des la chats assigene 
+#chat_dir variables qui assigne la chaine des caracteres chats  
 CHAT_DIR = "chats"
-
+#variables edited_images_dir qui assigne la chaine des caracteres edited_images
 EDITED_IMAGES_DIR = "edited_images"
 os.makedirs(CHAT_DIR, exist_ok=True)
 os.makedirs(EDITED_IMAGES_DIR, exist_ok=True)

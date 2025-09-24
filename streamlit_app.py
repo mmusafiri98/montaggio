@@ -8,7 +8,7 @@ import json
 import os
 import uuid
 
-# === CONFIG  pour accede a la page du titre appelle vision AI chat avec l icon assigne et l layaout assigne===
+#=== CONFIG  pour accede a la page du titre appelle vision AI chat avec l icon assigne et l layaout assigne===
 st.set_page_config(page_title="Vision AI Chat", page_icon="🎯", layout="wide")
 #chat_dir variables qui assigne la chaine des caracteres chats  
 CHAT_DIR = "chats"
@@ -70,9 +70,9 @@ def save_chat_history(history, chat_id):
       }
     ]
     """
-   # Ouverture du fichier en écriture, encodage UTF-8 pour gérer accents/emoji
+   #Ouverture du fichier en écriture, encodage UTF-8 pour gérer accents/emoji
     with open(os.path.join(CHAT_DIR, f"{chat_id}.json"), "w", encoding="utf-8") as f:
-   # Sauvegarde de l'historique en JSON lisible et fidèle
+   #Sauvegarde de l'historique en JSON lisible et fidèle
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 def load_chat_history(chat_id):

@@ -1,67 +1,82 @@
 import streamlit as st
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from PIL import Image
+import io
+import time
 import json
-import urllib.parse
 
-st.set_page_config(page_title="OperatorGPT Lite - Amazon", layout="wide")
-st.title("OperatorGPT Lite - Simulation Amazon")
+st.title("OperatorGPT Lite - Automatisation Web avec Selenium")
 
 # Historique des plans
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Instruction JSON pour simuler des actions
 instruction = st.text_area(
     "Entrez les actions à exécuter en JSON",
     value='''[
-    {"action": "goto", "url": "https://www.amazon.com"},
-    {"action": "search", "query": "wireless headphones"}
+    {"action": "goto", "url": "https://www.wikipedia.com"},
+    {"action": "search", "query": "Elon Musk"}
 ]'''
 )
 
+def screenshot(driver):
+    """Prend une capture d'écran et renvoie une image PIL"""
+    png = driver.get_screenshot_as_png()
+    img = Image.open(io.BytesIO(png))
+    return img
+
 def execute_plan(plan):
-    """
-    Simule les actions sur le site et affiche l'URL dans un iframe si possible
-    """
-    url_to_show = None
+    """Exécute le plan en utilisant Selenium et montre les captures"""
+    # Config Chrome headless
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")  # headless mais possibilité de voir les captures
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    
+    driver = webdriver.Chrome(options=chrome_options)
+    
     for step in plan:
         action = step.get("action")
         
         if action == "goto":
-            url_to_show = step.get("url")
-            st.info(f"➡️ Aller sur : {url_to_show}")
-        
+            url = step.get("url")
+            driver.get(url)
+            st.info(f"Aller sur : {url}")
+            time.sleep(2)
+            st.image(screenshot(driver))
+            
         elif action == "search":
             query = step.get("query")
-            if url_to_show and "amazon.com" in url_to_show:
-                # Générer URL de recherche Amazon
-                query_encoded = urllib.parse.quote(query)
-                url_to_show = f"{url_to_show}/s?k={query_encoded}"
-                st.info(f"🔍 Recherche sur Amazon : {query}")
-            else:
-                st.warning("Impossible de faire une recherche : URL non définie ou non Amazon")
+            try:
+                # Cherche la barre de recherche
+                search_box = driver.find_element(By.NAME, "search")  # Pour Wikipedia
+                search_box.clear()
+                search_box.send_keys(query)
+                search_box.send_keys(Keys.RETURN)
+                st.info(f"Recherche sur le site : {query}")
+                time.sleep(3)
+                st.image(screenshot(driver))
+            except Exception as e:
+                st.error(f"Recherche impossible : {e}")
         
         else:
-            st.warning(f"Action non prise en charge : {action}")
+            st.warning(f"Action non supportée : {action}")
 
-    if url_to_show:
-        # Afficher le site / résultats dans un iframe
-        st.subheader("Vue web simulée")
-        try:
-            st.components.v1.iframe(url_to_show, height=600)
-        except Exception as e:
-            st.warning(f"Impossible d'afficher le site dans un iframe : {e}")
+    driver.quit()
+    st.success("Plan exécuté")
 
-# Bouton pour exécuter le plan
 if st.button("Exécuter le plan"):
     try:
         plan = json.loads(instruction)
         st.session_state.history.append(plan)
         execute_plan(plan)
-        st.success("✅ Plan exécuté (simulation)")
     except Exception as e:
         st.error(f"JSON invalide : {e}")
 
-# Affichage de l'historique
+# Historique
 st.subheader("Historique des plans exécutés")
 for i, plan in enumerate(st.session_state.history):
     st.write(f"Plan {i+1} : {plan}")

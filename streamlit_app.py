@@ -1,6 +1,9 @@
 import streamlit as st
 from playwright.sync_api import sync_playwright
+import subprocess
+import os
 import time
+import json
 
 st.title("OperatorGPT Lite - Contrôle navigateur")
 
@@ -8,7 +11,7 @@ st.title("OperatorGPT Lite - Contrôle navigateur")
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Instruction utilisateur (sous forme JSON simplifiée)
+# Instruction utilisateur (JSON simplifié)
 instruction = st.text_area(
     "Entrez les actions à exécuter en JSON",
     value='''[
@@ -18,13 +21,19 @@ instruction = st.text_area(
 ]'''
 )
 
+# Fonction pour installer Chromium si nécessaire
+def ensure_chromium():
+    chromium_path = os.path.expanduser("~/.cache/ms-playwright/chromium-1129/chrome-linux/chrome")
+    if not os.path.exists(chromium_path):
+        st.info("Téléchargement de Chromium pour Playwright...")
+        subprocess.run(["playwright", "install", "chromium"], check=True)
+
+# Fonction pour exécuter le plan
 def execute_plan(plan):
-    """
-    Exécute les actions définies dans Playwright
-    """
     try:
+        ensure_chromium()  # Installer Chromium si absent
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=True)  # headless=True pour le cloud
             page = browser.new_page()
             for step in plan:
                 action = step.get("action")
@@ -49,8 +58,8 @@ def execute_plan(plan):
     except Exception as e:
         st.error(f"Erreur : {e}")
 
+# Bouton pour exécuter le plan
 if st.button("Exécuter le plan"):
-    import json
     try:
         plan = json.loads(instruction)
         st.session_state.history.append(plan)
@@ -62,3 +71,4 @@ if st.button("Exécuter le plan"):
 st.subheader("Historique des plans exécutés")
 for i, plan in enumerate(st.session_state.history):
     st.write(f"Plan {i+1} : {plan}")
+

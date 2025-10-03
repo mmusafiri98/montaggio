@@ -8,7 +8,7 @@ import io
 import base64
 import os
 import uuid
-from supabase import create_client
+
 
 # -------------------------
 # Configuration Streamlit

@@ -1,3 +1,30 @@
-streamlit>=1.32.0
-selenium>=5.8.0
-Pillow>=10.0.0
+# Core
+streamlit>=1.32.0,<2.0
+
+# Playwright & greenlet compatible Python 3.12
+playwright==1.46.0
+greenlet==2.0.2
+
+# Dependencies of Streamlit
+altair>=4.0,<6
+blinker>=1.5.0,<2
+cachetools>=4.0,<7
+click>=7.0,<9
+numpy>=1.23,<3
+packaging>=20,<26
+pandas>=1.4.0,<3
+pillow>=7.1.0,<12
+protobuf>=3.20,<7
+pyarrow>=7.0
+requests>=2.27,<3
+tenacity>=8.1.0,<10
+toml>=0.10.1,<2
+watchdog>=2.1.5,<7
+gitpython>=3.0.7,<4
+pydeck>=0.8.0b4,<1
+tornado>=6.0.3,<7
+
+# Extras needed by some Streamlit/Altair features
+jinja2>=3.0
+jsonschema>=3.0
+typing-extensions

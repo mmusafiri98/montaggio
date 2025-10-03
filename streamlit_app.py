@@ -7,8 +7,6 @@ import time
 import io
 import base64
 import os
-import uuid
-
 
 # -------------------------
 # Configuration Streamlit
@@ -27,139 +25,6 @@ When you receive an image description starting with [IMAGE], you should:
 2. Provide detailed analysis of what you observe
 3. Answer any specific questions about the image
 4. Be helpful and descriptive in your analysis"""
-
-# -------------------------
-# Supabase
-# -------------------------
-@st.cache_resource
-def init_supabase():
-    try:
-        supabase_url = os.environ.get("SUPABASE_URL")
-        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
-        if not supabase_url or not supabase_key:
-            st.error("Supabase URL ou clé manquante")
-            return None
-        client = create_client(supabase_url, supabase_key)
-        return client
-    except Exception as e:
-        st.error(f"Erreur Supabase: {e}")
-        return None
-
-supabase = init_supabase()
-
-# -------------------------
-# Fonctions Utilisateur
-# -------------------------
-def create_user(email, password, name):
-    if not supabase:
-        return False
-    try:
-        try:
-            response = supabase.auth.admin.create_user({
-                "email": email,
-                "password": password,
-                "email_confirm": True,
-                "user_metadata": {"name": name}
-            })
-            return response.user is not None
-        except:
-            user_data = {
-                "id": str(uuid.uuid4()),
-                "email": email,
-                "password": password,
-                "name": name,
-                "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
-            }
-            resp = supabase.table("users").insert(user_data).execute()
-            return bool(resp.data and len(resp.data) > 0)
-    except Exception as e:
-        st.error(f"Erreur create_user: {e}")
-        return False
-
-def verify_user(email, password):
-    if not supabase:
-        return None
-    try:
-        try:
-            resp = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            if resp.user:
-                return {
-                    "id": resp.user.id,
-                    "email": resp.user.email,
-                    "name": resp.user.user_metadata.get("name", email.split("@")[0])
-                }
-        except:
-            resp = supabase.table("users").select("*").eq("email", email).execute()
-            if resp.data and len(resp.data) > 0:
-                user = resp.data[0]
-                if user.get("password") == password:
-                    return {
-                        "id": user["id"],
-                        "email": user["email"],
-                        "name": user.get("name", email.split("@")[0])
-                    }
-        return None
-    except Exception as e:
-        st.error(f"Erreur verify_user: {e}")
-        return None
-
-# -------------------------
-# Conversations & Messages
-# -------------------------
-def create_conversation(user_id, description="Nouvelle conversation"):
-    if not supabase or not user_id:
-        return None
-    try:
-        data = {
-            "conversation_id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "description": description,
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-        resp = supabase.table("conversations").insert(data).execute()
-        if resp.data and len(resp.data) > 0:
-            return resp.data[0]
-        return None
-    except Exception as e:
-        st.error(f"Erreur create_conversation: {e}")
-        return None
-
-def get_conversations(user_id):
-    if not supabase or not user_id:
-        return []
-    try:
-        resp = supabase.table("conversations").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-        return resp.data if resp.data else []
-    except:
-        return []
-
-def add_message(conversation_id, sender, content, msg_type="text", image_data=None):
-    if not supabase:
-        return False
-    try:
-        data = {
-            "conversation_id": conversation_id,
-            "sender": sender,
-            "content": content,
-            "type": msg_type,
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
-        }
-        if image_data:
-            data["image_data"] = image_data
-        resp = supabase.table("messages").insert(data).execute()
-        return bool(resp.data and len(resp.data) > 0)
-    except Exception as e:
-        st.error(f"add_message: {e}")
-        return False
-
-def get_messages(conversation_id):
-    if not supabase:
-        return []
-    try:
-        resp = supabase.table("messages").select("*").eq("conversation_id", conversation_id).order("created_at").execute()
-        return resp.data if resp.data else []
-    except:
-        return []
 
 # -------------------------
 # BLIP
@@ -197,7 +62,8 @@ def base64_to_image(img_str):
 def load_llama():
     try:
         return Client("muryshev/LLaMA-3.1-70b-it-NeMo")
-    except:
+    except Exception as e:
+        st.error(f"Erreur lors du chargement de LLaMA: {e}")
         return None
 
 llama_client = load_llama()
@@ -224,14 +90,19 @@ def get_ai_response(prompt):
 EDITED_IMAGES_DIR = "edited_images"
 os.makedirs(EDITED_IMAGES_DIR, exist_ok=True)
 
-def edit_image_with_qwen(image_path, edit_instruction, client):
+def edit_image_with_qwen(image, edit_instruction, client):
     """
     Édite une image en utilisant Qwen-Image-Edit.
-    Retourne le chemin de l’image éditée et un message de statut.
+    Retourne l'image éditée et un message de statut.
     """
     try:
+        # Convertir l'image en format acceptable par Gradio
+        img_bytes = io.BytesIO()
+        image.save(img_bytes, format='PNG')
+        img_bytes = img_bytes.getvalue()
+        
         result = client.predict(
-            image=image_path,  # <-- correction ici
+            image=img_bytes,
             prompt=edit_instruction,
             seed=0,
             randomize_seed=True,
@@ -240,13 +111,39 @@ def edit_image_with_qwen(image_path, edit_instruction, client):
             rewrite_prompt=True,
             api_name="/infer"
         )
+        
         if isinstance(result, tuple) and len(result) >= 1:
-            temp_image_path = result[0]
-            edited_image_path = os.path.join(EDITED_IMAGES_DIR, f"edited_{uuid.uuid4().hex}.png")
-            img = Image.open(temp_image_path)
-            img.save(edited_image_path)
-            return edited_image_path, f"✅ Image éditée selon : '{edit_instruction}'"
+            edited_image = Image.open(io.BytesIO(result[0]))
+            return edited_image, f"✅ Image éditée selon : '{edit_instruction}'"
         else:
             return None, f"❌ Résultat inattendu : {result}"
     except Exception as e:
         return None, f"Erreur édition : {e}"
+
+# -------------------------
+# Streamlit App
+# -------------------------
+def main():
+    st.title("Vision AI Chat")
+    
+    # Charger les modèles
+    processor, model = load_blip()
+    qwen_client = Client("Qwen-Image-Edit-model-path")  # Remplacez par le bon chemin
+    
+    # Interface utilisateur
+    uploaded_file = st.file_uploader("Choisissez une image...", type=["jpg", "jpeg", "png"])
+    edit_instruction = st.text_input("Instructions d'édition...")
+    
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file)
+        st.image(image, caption='Image uploadée.', use_column_width=True)
+        
+        if st.button("Éditer l'image"):
+            edited_image, status = edit_image_with_qwen(image, edit_instruction, qwen_client)
+            if edited_image:
+                st.image(edited_image, caption=status, use_column_width=True)
+            else:
+                st.error(status)
+
+if __name__ == "__main__":
+    main()

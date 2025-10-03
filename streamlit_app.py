@@ -1,3 +1,4 @@
+                
 import streamlit as st
 from transformers import BlipProcessor, BlipForConditionalGeneration
 from PIL import Image
@@ -128,7 +129,9 @@ def main():
     
     # Charger les modèles
     processor, model = load_blip()
-    qwen_client = Client("Qwen-Image-Edit-model-path")  # Remplacez par le bon chemin
+    
+    # Remplacez "Qwen-Image-Edit-model-path" par le bon chemin ou nom du modèle
+    qwen_client = Client("Qwen/Qwen-VL-Chat") 
     
     # Interface utilisateur
     uploaded_file = st.file_uploader("Choisissez une image...", type=["jpg", "jpeg", "png"])
@@ -139,11 +142,14 @@ def main():
         st.image(image, caption='Image uploadée.', use_column_width=True)
         
         if st.button("Éditer l'image"):
-            edited_image, status = edit_image_with_qwen(image, edit_instruction, qwen_client)
-            if edited_image:
-                st.image(edited_image, caption=status, use_column_width=True)
+            if qwen_client:
+                edited_image, status = edit_image_with_qwen(image, edit_instruction, qwen_client)
+                if edited_image:
+                    st.image(edited_image, caption=status, use_column_width=True)
+                else:
+                    st.error(status)
             else:
-                st.error(status)
+                st.error("Le client Qwen n'est pas disponible.")
 
 if __name__ == "__main__":
     main()

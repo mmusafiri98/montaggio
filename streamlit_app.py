@@ -6,11 +6,9 @@ import json
 
 st.title("OperatorGPT Lite - Contrôle navigateur (headless)")
 
-# Historique des actions
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Instruction utilisateur (JSON simplifié)
 instruction = st.text_area(
     "Entrez les actions à exécuter en JSON",
     value='''[
@@ -23,35 +21,45 @@ instruction = st.text_area(
 def execute_plan(plan):
     session = requests.Session()
     current_url = None
+    output_area = st.empty()  # Zone qui sera mise à jour en temps réel
+
     try:
         for step in plan:
             action = step.get("action")
+            
             if action == "goto":
                 url = step.get("url")
                 current_url = url
                 resp = session.get(url)
                 soup = BeautifulSoup(resp.text, "html.parser")
-                st.info(f"Aller sur : {url}")
-                time.sleep(1)
+                output_area.markdown(f"### Aller sur : {url}")
+                output_area.code(soup.prettify()[:1000])  # affiche les 1000 premiers caractères
+                time.sleep(2)
+                
             elif action == "click":
                 selector = step.get("selector")
                 soup = BeautifulSoup(session.get(current_url).text, "html.parser")
                 element = soup.select_one(selector)
                 if element and element.has_attr("href"):
                     current_url = element["href"]
-                    session.get(current_url)
-                    st.info(f"Clic simulé sur : {selector} -> {current_url}")
+                    resp = session.get(current_url)
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    output_area.markdown(f"### Clic simulé sur : {selector} → {current_url}")
+                    output_area.code(soup.prettify()[:1000])
                 else:
-                    st.warning(f"Aucun lien trouvé pour {selector}")
-                time.sleep(1)
+                    output_area.warning(f"Aucun lien trouvé pour {selector}")
+                time.sleep(2)
+                
             elif action == "type":
                 selector = step.get("selector")
                 text = step.get("text")
-                st.info(f"Taper '{text}' dans {selector} (simulation)")
-                time.sleep(1)
-        st.success("Plan exécuté (headless)")
+                output_area.markdown(f"### Taper '{text}' dans {selector} (simulation)")
+                time.sleep(2)
+        
+        output_area.success("Plan exécuté (headless)")
+        
     except Exception as e:
-        st.error(f"Erreur : {e}")
+        output_area.error(f"Erreur : {e}")
 
 if st.button("Exécuter le plan"):
     try:
@@ -61,7 +69,7 @@ if st.button("Exécuter le plan"):
     except Exception as e:
         st.error(f"JSON invalide : {e}")
 
-# Affichage de l'historique
 st.subheader("Historique des plans exécutés")
 for i, plan in enumerate(st.session_state.history):
     st.write(f"Plan {i+1} : {plan}")
+

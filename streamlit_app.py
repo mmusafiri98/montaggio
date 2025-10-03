@@ -1,8 +1,8 @@
 import streamlit as st
 import json
-import time
+import urllib.parse
 
-st.title("OperatorGPT Lite - Vue Web intégrée")
+st.title("OperatorGPT Lite - Vue Web YouTube")
 
 # Historique des plans
 if "history" not in st.session_state:
@@ -11,26 +11,31 @@ if "history" not in st.session_state:
 instruction = st.text_area(
     "Entrez les actions à exécuter en JSON",
     value='''[
-    {"action": "goto", "url": "https://example.com"}
+    {"action": "goto", "url": "https://www.youtube.com"},
+    {"action": "search", "query": "Impossible James Arthur"}
 ]'''
 )
 
 def execute_plan(plan):
+    url_to_show = None
     for step in plan:
         action = step.get("action")
         if action == "goto":
-            url = step.get("url")
-            st.markdown(f"### Aller sur : {url}")
-            # Affiche la page via un iframe
-            st.components.v1.iframe(url, height=600)
-            time.sleep(2)
-        elif action == "click":
-            selector = step.get("selector")
-            st.info(f"Clic simulé sur : {selector} (non interactif dans iframe)")
-        elif action == "type":
-            selector = step.get("selector")
-            text = step.get("text")
-            st.info(f"Taper '{text}' dans {selector} (simulation)")
+            url_to_show = step.get("url")
+            st.info(f"Aller sur : {url_to_show}")
+        elif action == "search":
+            query = step.get("query")
+            if url_to_show and "youtube.com" in url_to_show:
+                # Générer URL de recherche YouTube
+                query_encoded = urllib.parse.quote(query)
+                url_to_show = f"https://www.youtube.com/results?search_query={query_encoded}"
+                st.info(f"Recherche sur YouTube : {query}")
+        else:
+            st.warning(f"Action non prise en charge : {action}")
+
+    if url_to_show:
+        # Afficher le site / résultats de recherche dans un iframe
+        st.components.v1.iframe(url_to_show, height=600)
 
 if st.button("Exécuter le plan"):
     try:
